@@ -2,12 +2,13 @@ import numpy as np
 import scipy.signal as signal
 
 
-def split_ts_seq(ts_seq, sep_ts):
+def split_timestamp_seq(ts_seq, sep_ts):
     """
-
-    :param ts_seq:
-    :param sep_ts:
-    :return:
+    separate a given time sequence based on a list of cut-off timestamps.
+    does not return empty slices.
+    :param ts_seq: the time sequence to be cut
+    :param sep_ts: the cut-off points
+    :return: a list of slices, each of them contains events within that range
     """
     tss = ts_seq[:, 0].astype(float)
     unique_sep_ts = np.unique(sep_ts)
@@ -27,9 +28,10 @@ def split_ts_seq(ts_seq, sep_ts):
     return ts_seqs
 
 
-def correct_trajectory(original_xys, end_xy):
+def correct_trajectory(original_xys: np.ndarray, end_xy: np.ndarray):
     """
-
+    do correction based on a trajectory an given new end_xy.
+    do such correction by start+angle+displacement method
     :param original_xys: numpy ndarray, shape(N, 2)
     :param end_xy: numpy ndarray, shape(1, 2)
     :return:
@@ -67,14 +69,15 @@ def correct_trajectory(original_xys, end_xy):
 
 def correct_positions(rel_positions, reference_positions):
     """
-
-    :param rel_positions:
+    correct a list of positions based on given reference pos
+    :param rel_positions: sensor positions with timestamp
     :param reference_positions:
     :return:
     """
-    rel_positions_list = split_ts_seq(rel_positions, reference_positions[:, 0])
+    rel_positions_list = split_timestamp_seq(rel_positions, reference_positions[:, 0])
     if len(rel_positions_list) != reference_positions.shape[0] - 1:
-        # print(f'Rel positions list size: {len(rel_positions_list)}, ref positions size: {reference_positions.shape[0]}')
+        # print(f'Rel positions list size: {len(rel_positions_list)},
+        # ref positions size: {reference_positions.shape[0]}')
         del rel_positions_list[-1]
     assert len(rel_positions_list) == reference_positions.shape[0] - 1
 
@@ -111,7 +114,12 @@ def init_parameters_filter(sample_freq, warmup_data, cut_off_freq=2):
     return filter_b, filter_a, filter_zf
 
 
-def get_rotation_matrix_from_vector(rotation_vector):
+def get_rotation_matrix_from_vector(rotation_vector: np.ndarray | tuple | list):
+    """
+    returns a matrix representation of rotation degree vector in 3 dimensions, and in radians
+    :param rotation_vector: a vector or quaternion, should support indexing
+    :return: rot mat
+    """
     q1 = rotation_vector[0]
     q2 = rotation_vector[1]
     q3 = rotation_vector[2]
@@ -135,7 +143,7 @@ def get_rotation_matrix_from_vector(rotation_vector):
     q2_q3 = 2 * q2 * q3
     q1_q0 = 2 * q1 * q0
 
-    R = np.zeros((9,))
+    R = np.zeros((9,))  # hardcoded, without considering shifting but only linear trans
     if R.size == 9:
         R[0] = 1 - sq_q2 - sq_q3
         R[1] = q1_q2 - q3_q0
@@ -175,6 +183,12 @@ def get_rotation_matrix_from_vector(rotation_vector):
 
 
 def get_orientation(R):
+    """
+    get orientation of given layout. orientation is represented in rotational vector in radian
+    this is the inverse of get_rotational_matrix_from_vector
+    :param R: the object orientation, in matrix form
+    :return: value as an orientation vector
+    """
     flat_R = R.flatten()
     values = np.zeros((3,))
     if np.size(flat_R) == 9:

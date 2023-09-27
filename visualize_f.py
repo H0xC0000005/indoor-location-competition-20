@@ -2,11 +2,16 @@ import plotly.graph_objs as go
 from PIL import Image
 
 
-def save_figure_to_html(fig, filename):
-    fig.write_html(filename)
+def save_figure_to_html(fig: go.Figure, filename, auto_play: bool = False):
+    fig.write_html(filename, auto_play=auto_play)
 
 
-def visualize_trajectory(trajectory, floor_plan_filename, width_meter, height_meter, title=None, mode='lines + markers + text', show=False):
+def save_figure_as_picture(fig: go.Figure, filepath: str):
+    fig.write_image(filepath)
+
+
+def visualize_trajectory(trajectory, floor_plan_filename, width_meter, height_meter, title=None,
+                         mode='lines + markers + text', show=False):
     fig = go.Figure()
 
     # add trajectory
@@ -79,7 +84,8 @@ def visualize_trajectory(trajectory, floor_plan_filename, width_meter, height_me
     return fig
 
 
-def visualize_heatmap(position, value, floor_plan_filename, width_meter, height_meter, colorbar_title="colorbar", title=None, show=False):
+def visualize_heatmap(position, value, floor_plan_filename, width_meter, height_meter, colorbar_title="colorbar",
+                      title=None, show=False):
     fig = go.Figure()
 
     # add heat map

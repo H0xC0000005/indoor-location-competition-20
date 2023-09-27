@@ -2,10 +2,9 @@ import json
 import os
 from pathlib import Path
 
-
 import numpy as np
 
-from compute_f import split_ts_seq, compute_step_positions
+from compute_f import split_timestamp_seq, compute_step_positions
 from io_f import read_data_file
 from visualize_f import visualize_trajectory, visualize_heatmap, save_figure_to_html
 
@@ -23,7 +22,7 @@ ibeacon_image_save_dir = save_dir + '/ibeacon_images'
 wifi_count_image_save_dir = save_dir
 
 
-def calibrate_magnetic_wifi_ibeacon_to_position(path_file_list):
+def calibrate_magnetic_wifi_ibeacon_to_position(path_file_list: list[str]):
     mwi_datas = {}
     for path_filename in path_file_list:
         print(f'Processing {path_filename}...')
@@ -37,12 +36,14 @@ def calibrate_magnetic_wifi_ibeacon_to_position(path_file_list):
         posi_datas = path_datas.waypoint
 
         step_positions = compute_step_positions(acce_datas, ahrs_datas, posi_datas)
-        # visualize_trajectory(posi_datas[:, 1:3], floor_plan_filename, width_meter, height_meter, title='Ground Truth', show=True)
-        # visualize_trajectory(step_positions[:, 1:3], floor_plan_filename, width_meter, height_meter, title='Step Position', show=True)
+        # visualize_trajectory(posi_datas[:, 1:3], floor_plan_filename, width_meter, height_meter, title='Ground
+        # Truth', show=True)
+        # visualize_trajectory(step_positions[:, 1:3], floor_plan_filename, width_meter,
+        # height_meter, title='Step Position', show=True)
 
         if wifi_datas.size != 0:
             sep_tss = np.unique(wifi_datas[:, 0].astype(float))
-            wifi_datas_list = split_ts_seq(wifi_datas, sep_tss)
+            wifi_datas_list = split_timestamp_seq(wifi_datas, sep_tss)
             for wifi_ds in wifi_datas_list:
                 diff = np.abs(step_positions[:, 0] - float(wifi_ds[0, 0]))
                 index = np.argmin(diff)
@@ -58,13 +59,14 @@ def calibrate_magnetic_wifi_ibeacon_to_position(path_file_list):
 
         if ibeacon_datas.size != 0:
             sep_tss = np.unique(ibeacon_datas[:, 0].astype(float))
-            ibeacon_datas_list = split_ts_seq(ibeacon_datas, sep_tss)
+            ibeacon_datas_list = split_timestamp_seq(ibeacon_datas, sep_tss)
             for ibeacon_ds in ibeacon_datas_list:
                 diff = np.abs(step_positions[:, 0] - float(ibeacon_ds[0, 0]))
                 index = np.argmin(diff)
                 target_xy_key = tuple(step_positions[index, 1:3])
                 if target_xy_key in mwi_datas:
-                    mwi_datas[target_xy_key]['ibeacon'] = np.append(mwi_datas[target_xy_key]['ibeacon'], ibeacon_ds, axis=0)
+                    mwi_datas[target_xy_key]['ibeacon'] = np.append(mwi_datas[target_xy_key]['ibeacon'], ibeacon_ds,
+                                                                    axis=0)
                 else:
                     mwi_datas[target_xy_key] = {
                         'magnetic': np.zeros((0, 4)),
@@ -73,7 +75,7 @@ def calibrate_magnetic_wifi_ibeacon_to_position(path_file_list):
                     }
 
         sep_tss = np.unique(magn_datas[:, 0].astype(float))
-        magn_datas_list = split_ts_seq(magn_datas, sep_tss)
+        magn_datas_list = split_timestamp_seq(magn_datas, sep_tss)
         for magn_ds in magn_datas_list:
             diff = np.abs(step_positions[:, 0] - float(magn_ds[0, 0]))
             index = np.argmin(diff)
@@ -158,6 +160,30 @@ def extract_ibeacon_rssi(mwi_datas):
     return ibeacon_rssi
 
 
+def _glimpse_dict(to_glimpse: dict, name: str, num_to_peek: int = 3, *, final=True, _rec_level=0):
+    if num_to_peek == -1 or num_to_peek is None or num_to_peek >= len(to_glimpse):
+        num_to_peek = len(to_glimpse)
+    ct = 0
+    k = tuple(to_glimpse.keys())
+    prefix = "  " * _rec_level
+    print(f"{prefix}>> printing {name}, a glimpse of {num_to_peek} elements:")
+    while ct < num_to_peek:
+        v = to_glimpse[k[ct]]
+        if isinstance(v, dict):
+            _glimpse_dict(v, f"{name} child", num_to_peek=3, final=False, _rec_level=_rec_level+1)
+        elif isinstance(v, np.ndarray):
+            # only pick some elem to avoid explosion XD
+            print(f"{prefix}key: {k[ct]}, value get ndarr, so only printing first elem:")
+            try:
+                print(f"{prefix}{v[0]}")
+            except IndexError:
+                print(f"{prefix}got empty v: {v}")
+        else:
+            print(f"{prefix}key: {k[ct]}, value: {to_glimpse[k[ct]]}")
+        ct += 1
+    print()
+
+
 def extract_wifi_count(mwi_datas):
     wifi_counts = {}
     for position_key in mwi_datas:
@@ -190,67 +216,100 @@ if __name__ == "__main__":
 
         path_data = read_data_file(path_filename)
         path_id = path_filename.name.split(".")[0]
-        fig = visualize_trajectory(path_data.waypoint[:, 1:3], floor_plan_filename, width_meter, height_meter, title=path_id, show=False)
+        fig = visualize_trajectory(path_data.waypoint[:, 1:3], floor_plan_filename, width_meter, height_meter,
+                                   title=path_id, show=False)
         html_filename = f'{path_image_save_dir}/{path_id}.html'
         html_filename = str(Path(html_filename).resolve())
         save_figure_to_html(fig, html_filename)
 
     # 2. visualize step position, magnetic, wifi, ibeacon
     print('Visualizing more information...')
-    mwi_datas = calibrate_magnetic_wifi_ibeacon_to_position(path_filenames)
+    mwi_datas: dict = calibrate_magnetic_wifi_ibeacon_to_position(path_filenames)
+    _glimpse_dict(mwi_datas, "mwi_datas")
 
+    # this should be positions of all
     step_positions = np.array(list(mwi_datas.keys()))
-    fig = visualize_trajectory(step_positions, floor_plan_filename, width_meter, height_meter, mode='markers', title='Step Position', show=True)
+    fig = visualize_trajectory(step_positions, floor_plan_filename, width_meter, height_meter, mode='markers',
+                               title='Step Position', show=False)
     html_filename = f'{step_position_image_save_dir}/step_position.html'
     html_filename = str(Path(html_filename).resolve())
     save_figure_to_html(fig, html_filename)
 
     magnetic_strength = extract_magnetic_strength(mwi_datas)
+    _glimpse_dict(magnetic_strength, "mag_strength")
     heat_positions = np.array(list(magnetic_strength.keys()))
     heat_values = np.array(list(magnetic_strength.values()))
-    fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter, colorbar_title='mu tesla', title='Magnetic Strength', show=True)
+    fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter,
+                            colorbar_title='mu tesla', title='Magnetic Strength', show=False)
     html_filename = f'{magn_image_save_dir}/magnetic_strength.html'
     html_filename = str(Path(html_filename).resolve())
     save_figure_to_html(fig, html_filename)
 
     wifi_rssi = extract_wifi_rssi(mwi_datas)
-    print(f'This floor has {len(wifi_rssi.keys())} wifi aps')
-    ten_wifi_bssids = list(wifi_rssi.keys())[0:10]
-    print('Example 10 wifi ap bssids:\n')
-    for bssid in ten_wifi_bssids:
-        print(bssid)
-    target_wifi = input(f"Please input target wifi ap bssid:\n")
-    # target_wifi = '1e:74:9c:a7:b2:e4'
-    heat_positions = np.array(list(wifi_rssi[target_wifi].keys()))
-    heat_values = np.array(list(wifi_rssi[target_wifi].values()))[:, 0]
-    fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter, colorbar_title='dBm', title=f'Wifi: {target_wifi} RSSI', show=True)
-    html_filename = f'{wifi_image_save_dir}/{target_wifi.replace(":", "-")}.html'
-    html_filename = str(Path(html_filename).resolve())
-    save_figure_to_html(fig, html_filename)
+    _glimpse_dict(wifi_rssi, "wifi_rssi")
+    # print(f'This floor has {len(wifi_rssi.keys())} wifi aps')
+    # ten_wifi_bssids = list(wifi_rssi.keys())[0:10]
+    # print('Example 10 wifi ap bssids:\n')
+    # for bssid in ten_wifi_bssids:
+    #     print(bssid)
+    # # target_wifi = '1e:74:9c:a7:b2:e4'
+    # target_wifi = None
+    # while True:
+    #     try:
+    #         target_wifi = input(f"Please input target wifi ap bssid:\n")
+    #         heat_positions = np.array(list(wifi_rssi[target_wifi].keys()))
+    #         break
+    #     except KeyError as e:
+    #         print(e)
+    #         print(f"expected wifi id in {wifi_rssi.keys()} but got {target_wifi}")
+    ct = 0
+    for target_wifi in wifi_rssi:
+        heat_positions = np.array(list(wifi_rssi[target_wifi].keys()))
+        heat_values = np.array(list(wifi_rssi[target_wifi].values()))[:, 0]
+        fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter,
+                                colorbar_title='dBm', title=f'Wifi: {target_wifi} RSSI', show=False)
+        html_filename = f'{wifi_image_save_dir}/{target_wifi.replace(":", "-")}.html'
+        html_filename = str(Path(html_filename).resolve())
+        save_figure_to_html(fig, html_filename)
+        ct += 1
+        if ct >= 30:
+            break
 
     ibeacon_rssi = extract_ibeacon_rssi(mwi_datas)
-    print(f'This floor has {len(ibeacon_rssi.keys())} ibeacons')
-    ten_ibeacon_ummids = list(ibeacon_rssi.keys())[0:10]
-    print('Example 10 ibeacon UUID_MajorID_MinorIDs:\n')
-    for ummid in ten_ibeacon_ummids:
-        print(ummid)
-    target_ibeacon = input(f"Please input target ibeacon UUID_MajorID_MinorID:\n")
-    # target_ibeacon = 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825_10073_61418'
-    heat_positions = np.array(list(ibeacon_rssi[target_ibeacon].keys()))
-    heat_values = np.array(list(ibeacon_rssi[target_ibeacon].values()))[:, 0]
-    fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter, colorbar_title='dBm', title=f'iBeacon: {target_ibeacon} RSSI', show=True)
-    html_filename = f'{ibeacon_image_save_dir}/{target_ibeacon}.html'
-    html_filename = str(Path(html_filename).resolve())
-    save_figure_to_html(fig, html_filename)
+    _glimpse_dict(ibeacon_rssi, "ibeacon_rssi")
+    # print(f'This floor has {len(ibeacon_rssi.keys())} ibeacons')
+    # ten_ibeacon_ummids = list(ibeacon_rssi.keys())[0:10]
+    # print('Example 10 ibeacon UUID_MajorID_MinorIDs:\n')
+    # for ummid in ten_ibeacon_ummids:
+    #     print(ummid)
+    # while True:
+    #     try:
+    #         target_ibeacon = input(f"Please input target ibeacon UUID_MajorID_MinorID:\n")
+    #         # target_ibeacon = 'FDA50693-A4E2-4FB1-AFCF-C6EB07647825_10073_61418'
+    #         heat_positions = np.array(list(ibeacon_rssi[target_ibeacon].keys()))
+    #         heat_values = np.array(list(ibeacon_rssi[target_ibeacon].values()))[:, 0]
+    #         break
+    #     except KeyError as e:
+    #         print(f"invalid choice. some sample beacon ids: {ten_ibeacon_ummids}")
+    for target_ibeacon in ibeacon_rssi:
+        heat_positions = np.array(list(ibeacon_rssi[target_ibeacon].keys()))
+        heat_values = np.array(list(ibeacon_rssi[target_ibeacon].values()))[:, 0]
+        fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter,
+                                colorbar_title='dBm', title=f'iBeacon: {target_ibeacon} RSSI', show=False)
+        html_filename = f'{ibeacon_image_save_dir}/{target_ibeacon}.html'
+        html_filename = str(Path(html_filename).resolve())
+        save_figure_to_html(fig, html_filename)
 
     wifi_counts = extract_wifi_count(mwi_datas)
+    _glimpse_dict(wifi_counts, "wifi_counts")
     heat_positions = np.array(list(wifi_counts.keys()))
     heat_values = np.array(list(wifi_counts.values()))
     # filter out positions that no wifi detected
     mask = heat_values != 0
     heat_positions = heat_positions[mask]
     heat_values = heat_values[mask]
-    fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter, colorbar_title='number', title=f'Wifi Count', show=True)
+    fig = visualize_heatmap(heat_positions, heat_values, floor_plan_filename, width_meter, height_meter,
+                            colorbar_title='number', title=f'Wifi Count', show=False)
     html_filename = f'{wifi_count_image_save_dir}/wifi_count.html'
     html_filename = str(Path(html_filename).resolve())
     save_figure_to_html(fig, html_filename)
